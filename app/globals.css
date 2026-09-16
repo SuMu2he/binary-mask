@@ -57,6 +57,7 @@ input[type="number"]::-webkit-outer-spin-button { appearance: none; margin: 0; }
 input, select, textarea { width: 100%; border: 1px solid #d4dcd7; border-radius: 8px; outline: none; background: var(--white); color: var(--ink); }
 input, select { height: 40px; padding: 0 11px; font-size: 13px; font-weight: 650; }
 input:focus, select:focus, textarea:focus { border-color: var(--accent-dark); box-shadow: 0 0 0 3px rgba(199,255,61,.22); }
+input[data-numeric-input][aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 2px var(--danger-soft); }
 input:disabled { background: #eef1ed; color: #737e78; -webkit-text-fill-color: #737e78; opacity: 1; }
 .number-input { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .input-shell { position: relative; }

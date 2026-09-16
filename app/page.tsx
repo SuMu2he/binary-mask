@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import HelpDialog from './help-dialog';
 import AboutDialog from './about-dialog';
+import NumericInput, { validateNumericInputs } from './numeric-input';
 
 type ShapeKind = 'circle' | 'triangle' | 'rectangle';
 type ParametricKind = ShapeKind | 'text' | 'grating';
@@ -571,6 +572,9 @@ export default function Home() {
   const canvasFrameRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
+  const shapeFieldsRef = useRef<HTMLDivElement>(null);
+  const newCanvasFieldsRef = useRef<HTMLElement>(null);
+  const matrixFieldsRef = useRef<HTMLElement>(null);
   const layerCreateRef = useRef<HTMLDivElement>(null);
   const drawingRef = useRef(false);
   const lastPointRef = useRef<Point | null>(null);
@@ -638,7 +642,6 @@ export default function Home() {
   const [pastePreview, setPastePreview] = useState<(BinaryBlock & Point) | null>(null);
   const [movePreview, setMovePreview] = useState<MovePreview | null>(null);
   const [zoom, setZoom] = useState(100);
-  const [zoomInput, setZoomInput] = useState('100%');
   const [fitScale, setFitScale] = useState(0.5);
   const [autoFitRequest, setAutoFitRequest] = useState(0);
   const [matrixOpen, setMatrixOpen] = useState(false);
@@ -874,7 +877,7 @@ export default function Home() {
       if (appliedAutoFitRequestRef.current !== autoFitRequest) {
         appliedAutoFitRequestRef.current = autoFitRequest;
         const nextZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.floor(nextFitScale * 100)));
-        setZoom(nextZoom); setZoomInput(`${nextZoom}%`);
+        setZoom(nextZoom);
       }
     };
     calculate(); const observer = new ResizeObserver(calculate); observer.observe(stage); return () => observer.disconnect();
@@ -1007,6 +1010,7 @@ export default function Home() {
   };
   const beginPaste = () => { if (!binaryClipboard) { setToast('当前没有可粘贴的矩阵块。'); return; } if (!requireEditableLayer()) return; setPastePreview({ ...binaryClipboard, x: cursor.x, y: cursor.y }); setTool('select'); };
   const applyShape = () => {
+    if (!validateNumericInputs(shapeFieldsRef.current)) return;
     if (!hasParametricContent) { setToast(shape === 'text' ? '请输入需要写入的文字。' : '光栅宽度、高度和周期必须大于 0。'); return; }
     if (!clippedRange.hasIntersection) { setToast(`${parametricLabel}完全位于画布外，没有可写入的像素。`); return; }
     if (!requireEditableLayer()) return;
@@ -1121,6 +1125,7 @@ export default function Home() {
   };
   const loadMatrixText = () => { if (!matrixDraftRef.current) return; if (matrixRegion.width * matrixRegion.height > 300000 && !window.confirm('当前范围较大，转换为文本可能需要一些时间。是否继续？')) return; setMatrixText(matrixScope === 'selection' ? regionToText(matrixDraftRef.current, width, matrixRegion) : layerToText(matrixDraftRef.current, width, height)); };
   const applyMatrixEditor = () => void withProcessing('正在应用矩阵', async () => {
+    if (!validateNumericInputs(matrixFieldsRef.current)) return;
     if (!requireEditableLayer()) return;
     try {
       if (matrixView === 'text') {
@@ -1175,6 +1180,7 @@ export default function Home() {
     } catch (error) { setToast(error instanceof Error ? error.message : '工程文件无法打开。'); }
   };
   const createNewCanvas = () => {
+    if (!validateNumericInputs(newCanvasFieldsRef.current)) return;
     const nextWidth = Math.round(newWidth); const nextHeight = Math.round(newHeight); const nextDpi = Math.round(newDpi);
     if (nextWidth < 1 || nextHeight < 1 || nextWidth > MAX_DIMENSION || nextHeight > MAX_DIMENSION) { setToast(`宽度和高度必须在 1～${MAX_DIMENSION} 之间。`); return; }
     if (nextDpi < 1 || nextDpi > 2400) { setToast('DPI 必须在 1～2400 之间。'); return; }
@@ -1190,8 +1196,7 @@ export default function Home() {
   const toggleGratingAspect = () => { if (!gratingAspectLinked) setGratingAspectRatio(gratingWidth > 0 ? gratingHeight / gratingWidth : 1); setGratingAspectLinked((value) => !value); };
   const updateGratingWidth = (value: number) => { const next = Math.max(0.01, value || 0.01); setGratingWidth(next); if (gratingAspectLinked) setGratingHeight(Math.max(0.01, next * gratingAspectRatio)); };
   const updateGratingHeight = (value: number) => { const next = Math.max(0.01, value || 0.01); setGratingHeight(next); if (gratingAspectLinked) setGratingWidth(Math.max(0.01, next / (gratingAspectRatio || 1))); };
-  const setZoomValue = (next: number) => { const normalized = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(next))); setZoom(normalized); setZoomInput(`${normalized}%`); };
-  const applyZoomInput = () => { const parsed = Number(zoomInput.replace('%', '').trim()); if (!Number.isFinite(parsed)) { setZoomInput(`${zoom}%`); return; } setZoomValue(parsed); };
+  const setZoomValue = (next: number) => { const normalized = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(next))); setZoom(normalized); };
   const fitCanvas = () => setZoomValue(Math.floor(fitScale * 100));
   const actualSize = () => setZoomValue(100);
   const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => { event.preventDefault(); const frame = canvasFrameRef.current; if (!frame) return; const rect = frame.getBoundingClientRect(); pendingZoomAnchorRef.current = { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)), y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)), clientX: event.clientX, clientY: event.clientY }; setZoomValue(zoom + (event.deltaY < 0 ? 10 : -10)); };
@@ -1263,33 +1268,33 @@ export default function Home() {
             <div className="physical-size"><span>物理尺寸</span><strong>{physicalWidth} × {physicalHeight} mm</strong></div>
           </div>
           <div className="section-rule" />
-          <div className="shape-section" onFocusCapture={() => setTool('shape')}>
+          <div ref={shapeFieldsRef} className="shape-section" onFocusCapture={() => setTool('shape')}>
           <SectionHeading number="02" title="精确图形" subtitle="PARAMETRIC SHAPE" />
           <label>图形类型<select value={shape} onChange={(event) => setShape(event.target.value as ParametricKind)}><option value="circle">圆</option><option value="triangle">三角形</option><option value="rectangle">矩形</option><option value="text">文本</option><option value="grating">光栅</option></select></label>
-          <div className="field-grid two-columns"><label>中心 X<input className="number-input" type="number" step="0.5" value={centerX} onChange={(event) => setCenterX(Number(event.target.value))} /></label><label>中心 Y<input className="number-input" type="number" step="0.5" value={centerY} onChange={(event) => setCenterY(Number(event.target.value))} /></label></div>
+          <div className="field-grid two-columns"><label>中心 X<NumericInput className="number-input" step="0.5" value={centerX} onValueChange={(value) => setCenterX(value)} /></label><label>中心 Y<NumericInput className="number-input" step="0.5" value={centerY} onValueChange={(value) => setCenterY(value)} /></label></div>
           {shape === 'text' ? <>
             <label>文本内容<textarea className="text-content-input" rows={3} value={textContent} onChange={(event) => setTextContent(event.target.value)} spellCheck={false} placeholder="输入单行或多行文本" /></label>
-            <div className="field-grid two-columns"><label>字号<input className="number-input" type="number" min="0.5" step="0.5" value={Number(textFontSize.toFixed(4))} onChange={(event) => setTextFontSize(Math.max(0.5, Number(event.target.value) || 0.5))} /></label><label>字间距<input className="number-input" type="number" step="0.5" value={Number(textLetterSpacing.toFixed(4))} onChange={(event) => setTextLetterSpacing(Number(event.target.value) || 0)} /></label></div>
+            <div className="field-grid two-columns"><label>字号<NumericInput className="number-input" min="0.5" step="0.5" value={Number(textFontSize.toFixed(4))} onValueChange={(value) => setTextFontSize(Math.max(0.5, value || 0.5))} /></label><label>字间距<NumericInput className="number-input" step="0.5" value={Number(textLetterSpacing.toFixed(4))} onValueChange={(value) => setTextLetterSpacing(value || 0)} /></label></div>
             <div className="field-grid two-columns"><label>字体<select value={textFont} onChange={(event) => setTextFont(event.target.value as TextFont)}><option value="sans">无衬线</option><option value="serif">衬线</option><option value="mono">等宽</option></select></label><label>字重<select value={textWeight} onChange={(event) => setTextWeight(event.target.value as TextWeight)}><option value="400">常规</option><option value="700">粗体</option></select></label></div>
-            <div className="field-grid two-columns"><label>行距倍数<input className="number-input" type="number" min="0.1" step="0.1" value={textLineHeight} onChange={(event) => setTextLineHeight(Math.max(0.1, Number(event.target.value) || 0.1))} /></label><label>多行对齐<select value={textAlignment} onChange={(event) => setTextAlignment(event.target.value as TextAlignment)}><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></label></div>
+            <div className="field-grid two-columns"><label>行距倍数<NumericInput className="number-input" min="0.1" step="0.1" value={textLineHeight} onValueChange={(value) => setTextLineHeight(Math.max(0.1, value || 0.1))} /></label><label>多行对齐<select value={textAlignment} onChange={(event) => setTextAlignment(event.target.value as TextAlignment)}><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></label></div>
           </> : shape === 'grating' ? <>
             <div className="linked-dimensions">
-              <label>区域宽度<input className="number-input" type="number" min="0.01" step="0.5" value={Number(gratingWidth.toFixed(4))} onChange={(event) => updateGratingWidth(Number(event.target.value))} /></label>
+              <label>区域宽度<NumericInput className="number-input" min="0.01" step="0.5" value={Number(gratingWidth.toFixed(4))} onValueChange={(value) => updateGratingWidth(value)} /></label>
               <button className={gratingAspectLinked ? 'link-button active' : 'link-button'} type="button" aria-label={gratingAspectLinked ? '解除区域比例锁定' : '锁定当前区域比例'} aria-pressed={gratingAspectLinked} onClick={toggleGratingAspect}><LinkIcon /></button>
-              <label>区域高度<input className="number-input" type="number" min="0.01" step="0.5" value={Number(gratingHeight.toFixed(4))} onChange={(event) => updateGratingHeight(Number(event.target.value))} /></label>
+              <label>区域高度<NumericInput className="number-input" min="0.01" step="0.5" value={Number(gratingHeight.toFixed(4))} onValueChange={(value) => updateGratingHeight(value)} /></label>
             </div>
-            <div className="field-grid two-columns"><label>周期<input className="number-input" type="number" min="0.01" step="0.5" value={Number(gratingPeriod.toFixed(4))} onChange={(event) => setGratingPeriod(Math.max(0.01, Number(event.target.value) || 0.01))} /></label><label>栅线占空比<div className="input-shell"><input className="number-input" type="number" min="0" max="100" step="0.1" value={gratingDuty} onChange={(event) => setGratingDuty(Math.max(0, Math.min(100, Number(event.target.value) || 0)))} /><FieldSuffix>%</FieldSuffix></div></label></div>
-            <label>相位偏移<input className="number-input" type="number" step="0.5" value={Number(gratingPhase.toFixed(4))} onChange={(event) => setGratingPhase(Number(event.target.value) || 0)} /></label>
+            <div className="field-grid two-columns"><label>周期<NumericInput className="number-input" min="0.01" step="0.5" value={Number(gratingPeriod.toFixed(4))} onValueChange={(value) => setGratingPeriod(Math.max(0.01, value || 0.01))} /></label><label>栅线占空比<div className="input-shell"><NumericInput className="number-input" min="0" max="100" step="0.1" value={gratingDuty} onValueChange={(value) => setGratingDuty(Math.max(0, Math.min(100, value || 0)))} /><FieldSuffix>%</FieldSuffix></div></label></div>
+            <label>相位偏移<NumericInput className="number-input" step="0.5" value={Number(gratingPhase.toFixed(4))} onValueChange={(value) => setGratingPhase(value || 0)} /></label>
           </> : shape !== 'triangle' ? <div className="linked-dimensions">
-            <label>{shape === 'circle' ? '直径 X' : '宽度 X'}<input className="number-input" type="number" min="0.01" step="0.5" value={Number(dimensionX.toFixed(4))} onChange={(event) => updateDimensionX(Number(event.target.value))} /></label>
+            <label>{shape === 'circle' ? '直径 X' : '宽度 X'}<NumericInput className="number-input" min="0.01" step="0.5" value={Number(dimensionX.toFixed(4))} onValueChange={(value) => updateDimensionX(value)} /></label>
             <button className={aspectLinked ? 'link-button active' : 'link-button'} type="button" aria-label={aspectLinked ? '解除比例锁定' : '锁定当前比例'} aria-pressed={aspectLinked} onClick={toggleAspect}><LinkIcon /></button>
-            <label>{shape === 'circle' ? '直径 Y' : '高度 Y'}<input className="number-input" type="number" min="0.01" step="0.5" value={Number(dimensionY.toFixed(4))} onChange={(event) => updateDimensionY(Number(event.target.value))} /></label>
+            <label>{shape === 'circle' ? '直径 Y' : '高度 Y'}<NumericInput className="number-input" min="0.01" step="0.5" value={Number(dimensionY.toFixed(4))} onValueChange={(value) => updateDimensionY(value)} /></label>
           </div> : <>
-            <label>底边长度<input className="number-input" type="number" min="0.01" step="0.5" value={Number(triangleBase.toFixed(4))} onChange={(event) => setTriangleBase(Math.max(0.01, Number(event.target.value) || 0.01))} /></label>
-            <div className="field-grid two-columns"><label>底边对应的高<input className="number-input" type="number" min="0.01" step="0.5" disabled={equilateral} value={Number(resolvedTriangleHeight.toFixed(4))} onChange={(event) => setTriangleHeight(Math.max(0.01, Number(event.target.value) || 0.01))} /></label><label>顶点投影距离<input className="number-input" type="number" step="0.5" disabled={equilateral} value={Number(resolvedTriangleProjection.toFixed(4))} onChange={(event) => setTriangleProjection(Number(event.target.value) || 0)} /></label></div>
+            <label>底边长度<NumericInput className="number-input" min="0.01" step="0.5" value={Number(triangleBase.toFixed(4))} onValueChange={(value) => setTriangleBase(Math.max(0.01, value || 0.01))} /></label>
+            <div className="field-grid two-columns"><label>底边对应的高<NumericInput className="number-input" min="0.01" step="0.5" disabled={equilateral} value={Number(resolvedTriangleHeight.toFixed(4))} onValueChange={(value) => setTriangleHeight(Math.max(0.01, value || 0.01))} /></label><label>顶点投影距离<NumericInput className="number-input" step="0.5" disabled={equilateral} value={Number(resolvedTriangleProjection.toFixed(4))} onValueChange={(value) => setTriangleProjection(value || 0)} /></label></div>
             <label className="checkbox-row"><input type="checkbox" checked={equilateral} onChange={(event) => { const checked = event.target.checked; if (!checked) { setTriangleHeight((triangleBase * Math.sqrt(3)) / 2); setTriangleProjection(triangleBase / 2); } setEquilateral(checked); }} /><span>等边三角形</span></label>
           </>}
-          <div className="shape-unit-row"><label>单位<select value={sizeUnit} onChange={(event) => changeUnit(event.target.value as SizeUnit)}><option value="px">px</option><option value="mm">mm</option></select></label><label>旋转<div className="input-shell"><input className="number-input" type="number" step="1" value={rotation} onChange={(event) => setRotation(Number(event.target.value) || 0)} /><FieldSuffix>°</FieldSuffix></div></label></div>
+          <div className="shape-unit-row"><label>单位<select value={sizeUnit} onChange={(event) => changeUnit(event.target.value as SizeUnit)}><option value="px">px</option><option value="mm">mm</option></select></label><label>旋转<div className="input-shell"><NumericInput className="number-input" step="1" value={rotation} onValueChange={(value) => setRotation(value || 0)} /><FieldSuffix>°</FieldSuffix></div></label></div>
           {shape === 'grating' ? <><label>写入模式<select value={gratingWriteMode} onChange={(event) => setGratingWriteMode(event.target.value as GratingWriteMode)}><option value="cover">完整覆盖</option><option value="lines">仅写栅线</option></select></label>{gratingWriteMode === 'cover' ? <label>极性<select value={gratingPolarity} onChange={(event) => setGratingPolarity(event.target.value as GratingPolarity)}><option value="line1">栅线 1 · 间隔 0</option><option value="line0">栅线 0 · 间隔 1</option></select></label> : <label>栅线操作<select value={operation} onChange={(event) => setOperation(event.target.value as BooleanOperation)}><option value="set1">写入 1</option><option value="set0">写入 0</option><option value="xor">反转 XOR</option></select></label>}</> : <label>布尔操作<select value={operation} onChange={(event) => setOperation(event.target.value as BooleanOperation)}><option value="set1">写入 1</option><option value="set0">写入 0</option><option value="xor">反转 XOR</option></select></label>}
           <div className={`shape-readout ${!hasParametricContent || !clippedRange.hasIntersection ? 'error' : partiallyOutside || gratingAliased ? 'warning' : ''}`}><span>{shape === 'text' ? '文字像素范围' : shape === 'grating' ? '光栅像素范围' : '画布内像素范围'}</span><strong>{displayBounds}</strong><small>{parametricHint}</small></div>
           <button className="primary-button" type="button" disabled={!hasParametricContent || !clippedRange.hasIntersection || activeLayer.locked || Boolean(processing)} onClick={applyShape}>应用{parametricLabel}到当前图层 <span>↗</span></button>
@@ -1313,7 +1318,7 @@ export default function Home() {
             </div>
             {selectionLabel && <span className="selection-chip">{selectionLabel}<button type="button" aria-label="取消选区" title="取消选区" onClick={deselect}>×</button></span>}
             {processing && <span className="processing-chip"><i />{processing}</span>}
-            <div className="zoom-tools"><button type="button" aria-label="适合窗口" title="适合窗口 Ctrl+0" onClick={fitCanvas}><FitIcon /></button><label className="zoom-control" aria-label="画布缩放比例"><input value={zoomInput} onChange={(event) => setZoomInput(event.target.value)} onBlur={applyZoomInput} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} /></label></div>
+            <div className="zoom-tools"><button type="button" aria-label="适合窗口" title="适合窗口 Ctrl+0" onClick={fitCanvas}><FitIcon /></button><label className="zoom-control" aria-label="画布缩放比例"><NumericInput value={zoom} suffix="%" min={MIN_ZOOM} max={MAX_ZOOM} onValueChange={setZoomValue} /></label></div>
           </div>
           <div ref={stageRef} className={`stage ${spacePressed ? 'pan-ready' : ''} ${panRef.current ? 'panning' : ''}`} onWheel={handleWheel}><div className="stage-inner" style={{ minWidth: `${displayWidth + 112}px`, minHeight: `${displayHeight + 104}px` }}><div className="canvas-shell" style={{ width: `${displayWidth}px`, height: `${displayHeight}px`, '--grid-size': `${Math.max(8, 24 * (zoom / 100))}px` } as CSSProperties}>
             <div className="ruler ruler-x"><span /><span>{width / 2}</span><span>{width}</span></div><div className="ruler ruler-y"><span /><span>{height / 2}</span><span>{height}</span></div>
@@ -1342,20 +1347,20 @@ export default function Home() {
         </aside>
       </section>
 
-      {newCanvasOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setNewCanvasOpen(false); }}><section className="dialog-card new-canvas-dialog" role="dialog" aria-modal="true" aria-labelledby="new-canvas-title">
+      {newCanvasOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setNewCanvasOpen(false); }}><section ref={newCanvasFieldsRef} className="dialog-card new-canvas-dialog" role="dialog" aria-modal="true" aria-labelledby="new-canvas-title">
         <div className="modal-header"><div><small>NEW BINARY DOCUMENT</small><h2 id="new-canvas-title">新建画布</h2></div><button type="button" aria-label="关闭" onClick={() => setNewCanvasOpen(false)}>×</button></div><p>创建后，宽度、高度和 DPI 将锁定。每个图层都使用相同的画布尺寸。</p>
-        <div className="field-grid two-columns"><label>宽度<div className="input-shell"><input className="number-input" type="number" min="1" max={MAX_DIMENSION} value={newWidth} onChange={(event) => setNewWidth(Number(event.target.value))} /><FieldSuffix>px</FieldSuffix></div></label><label>高度<div className="input-shell"><input className="number-input" type="number" min="1" max={MAX_DIMENSION} value={newHeight} onChange={(event) => setNewHeight(Number(event.target.value))} /><FieldSuffix>px</FieldSuffix></div></label></div>
-        <label>DPI<input className="number-input" type="number" min="1" max="2400" value={newDpi} onChange={(event) => setNewDpi(Number(event.target.value))} /></label><div className="physical-size"><span>物理尺寸</span><strong>{newDpi > 0 ? ((newWidth / newDpi) * 25.4).toFixed(2) : '—'} × {newDpi > 0 ? ((newHeight / newDpi) * 25.4).toFixed(2) : '—'} mm</strong></div>
+        <div className="field-grid two-columns"><label>宽度<div className="input-shell"><NumericInput className="number-input" min="1" max={MAX_DIMENSION} value={newWidth} onValueChange={(value) => setNewWidth(value)} /><FieldSuffix>px</FieldSuffix></div></label><label>高度<div className="input-shell"><NumericInput className="number-input" min="1" max={MAX_DIMENSION} value={newHeight} onValueChange={(value) => setNewHeight(value)} /><FieldSuffix>px</FieldSuffix></div></label></div>
+        <label>DPI<NumericInput className="number-input" min="1" max="2400" value={newDpi} onValueChange={(value) => setNewDpi(value)} /></label><div className="physical-size"><span>物理尺寸</span><strong>{newDpi > 0 ? ((newWidth / newDpi) * 25.4).toFixed(2) : '—'} × {newDpi > 0 ? ((newHeight / newDpi) * 25.4).toFixed(2) : '—'} mm</strong></div>
         <div className="modal-footer"><button type="button" onClick={() => setNewCanvasOpen(false)}>取消</button><button className="modal-primary" type="button" onClick={createNewCanvas}>创建并锁定参数</button></div>
       </section></div>}
 
-      {matrixOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setMatrixOpen(false); }}><section className="dialog-card matrix-modal" role="dialog" aria-modal="true" aria-labelledby="matrix-title">
+      {matrixOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setMatrixOpen(false); }}><section ref={matrixFieldsRef} className="dialog-card matrix-modal" role="dialog" aria-modal="true" aria-labelledby="matrix-title">
         <div className="modal-header"><div><small>CURRENT LAYER MATRIX</small><h2 id="matrix-title">编辑当前图层 · {activeLayer.name}</h2></div><button type="button" aria-label="关闭" onClick={() => setMatrixOpen(false)}>×</button></div>
         <div className="matrix-legend"><span><i className="transparent-swatch">·</i>透明</span><span><i className="zero-swatch">0</i>黑色</span><span><i className="one-swatch">1</i>白色</span><b>{matrixRegion.width} × {matrixRegion.height}</b></div>
         <div className="matrix-scope" role="group" aria-label="矩阵编辑范围"><button className={matrixScope === 'layer' ? 'active' : ''} type="button" onClick={() => changeMatrixScope('layer')}>整个图层</button><button className={matrixScope === 'selection' ? 'active' : ''} type="button" disabled={!selection} onClick={() => changeMatrixScope('selection')}>当前选区</button><span>{matrixScope === 'selection' ? `X ${matrixRegion.x}～${matrixRegion.x + matrixRegion.width - 1} · Y ${matrixRegion.y}～${matrixRegion.y + matrixRegion.height - 1}` : '编辑完整图层矩阵'}</span></div>
         <div className="modal-tabs"><button className={matrixView === 'cells' ? 'active' : ''} type="button" onClick={() => setMatrixView('cells')}>单元格编辑</button><button className={matrixView === 'text' ? 'active' : ''} type="button" onClick={() => setMatrixView('text')}>文本输入</button></div>
         {matrixView === 'cells' ? <div className="cell-editor">
-          <div className="matrix-navigation"><label>起点 X<input className="number-input" type="number" min={matrixRegion.x} max={matrixRegion.x + matrixRegion.width - 1} value={matrixStartX} onChange={(event) => setMatrixStartX(Math.max(matrixRegion.x, Math.min(matrixRegion.x + matrixRegion.width - 1, Number(event.target.value) || matrixRegion.x)))} /></label><label>起点 Y<input className="number-input" type="number" min={matrixRegion.y} max={matrixRegion.y + matrixRegion.height - 1} value={matrixStartY} onChange={(event) => setMatrixStartY(Math.max(matrixRegion.y, Math.min(matrixRegion.y + matrixRegion.height - 1, Number(event.target.value) || matrixRegion.y)))} /></label><button type="button" onClick={() => setMatrixStartX(Math.max(matrixRegion.x, matrixStartX - MATRIX_COLUMNS))}>←</button><button type="button" onClick={() => setMatrixStartX(Math.min(matrixRegion.x + matrixRegion.width - 1, matrixStartX + MATRIX_COLUMNS))}>→</button><button type="button" onClick={() => setMatrixStartY(Math.max(matrixRegion.y, matrixStartY - MATRIX_ROWS))}>↑</button><button type="button" onClick={() => setMatrixStartY(Math.min(matrixRegion.y + matrixRegion.height - 1, matrixStartY + MATRIX_ROWS))}>↓</button></div>
+          <div className="matrix-navigation"><label>起点 X<NumericInput className="number-input" min={matrixRegion.x} max={matrixRegion.x + matrixRegion.width - 1} value={matrixStartX} onValueChange={(value) => setMatrixStartX(Math.max(matrixRegion.x, Math.min(matrixRegion.x + matrixRegion.width - 1, value || matrixRegion.x)))} /></label><label>起点 Y<NumericInput className="number-input" min={matrixRegion.y} max={matrixRegion.y + matrixRegion.height - 1} value={matrixStartY} onValueChange={(value) => setMatrixStartY(Math.max(matrixRegion.y, Math.min(matrixRegion.y + matrixRegion.height - 1, value || matrixRegion.y)))} /></label><button type="button" onClick={() => setMatrixStartX(Math.max(matrixRegion.x, matrixStartX - MATRIX_COLUMNS))}>←</button><button type="button" onClick={() => setMatrixStartX(Math.min(matrixRegion.x + matrixRegion.width - 1, matrixStartX + MATRIX_COLUMNS))}>→</button><button type="button" onClick={() => setMatrixStartY(Math.max(matrixRegion.y, matrixStartY - MATRIX_ROWS))}>↑</button><button type="button" onClick={() => setMatrixStartY(Math.min(matrixRegion.y + matrixRegion.height - 1, matrixStartY + MATRIX_ROWS))}>↓</button></div>
           <div className="matrix-grid-wrap"><div className="matrix-grid" style={{ gridTemplateColumns: `46px repeat(${matrixGridColumns.length}, 34px)` }} data-version={matrixDraftVersion}><span className="corner-cell">Y / X</span>{matrixGridColumns.map((x) => <span className="axis-cell" key={`x-${x}`}>{x}</span>)}{matrixGridRows.flatMap((y) => [<span className="axis-cell row-axis" key={`y-${y}`}>{y}</span>, ...matrixGridColumns.map((x) => { const value = matrixDraftRef.current?.[y * width + x] ?? TRANSPARENT; return <button type="button" key={`${x}-${y}`} className={`matrix-cell state-${value}`} aria-label={`X ${x}，Y ${y}，${value === OPAQUE_ONE ? '1 白色' : value === OPAQUE_ZERO ? '0 黑色' : '透明'}`} onClick={() => setMatrixCell(x, y)} onKeyDown={(event) => { if (event.key === '0') setMatrixCell(x, y, OPAQUE_ZERO); else if (event.key === '1') setMatrixCell(x, y, OPAQUE_ONE); else if (event.key === 'Delete' || event.key === 'Backspace') setMatrixCell(x, y, TRANSPARENT); }}>{value === OPAQUE_ONE ? '1' : value === OPAQUE_ZERO ? '0' : '·'}</button>; })])}</div></div>
           <p>单击按“透明 → 0 → 1”循环；键盘输入 0/1，Delete 或 Backspace 恢复透明。</p>
         </div> : <div className="text-matrix-editor"><p>第一行固定对应编辑范围顶部。输入尺寸必须与{matrixScope === 'selection' ? '当前选区' : '完整图层'}一致；支持空格、逗号、换行和 MATLAB 分号。</p><button type="button" onClick={loadMatrixText}>载入{matrixScope === 'selection' ? '当前选区' : '当前图层'}文本</button><textarea value={matrixText} onChange={(event) => setMatrixText(event.target.value)} spellCheck={false} placeholder={'· · · · ·\n· 0 1 0 ·\n· 1 1 1 ·\n· · · · ·'} /></div>}
