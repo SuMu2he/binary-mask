@@ -562,7 +562,6 @@ export default function Home() {
   const initialLayerRef = useRef<Layer | null>(null);
   if (!initialLayerRef.current) {
     const layer = createLayer(DEFAULT_WIDTH, DEFAULT_HEIGHT, '图层 1');
-    writeShape(layer.pixels, DEFAULT_WIDTH, DEFAULT_HEIGHT, { kind: 'circle', centerX: DEFAULT_WIDTH / 2, centerY: DEFAULT_HEIGHT / 2, sizeX: 10, sizeY: 10, projection: 0, rotation: 0 }, 'set1');
     initialLayerRef.current = layer;
   }
   const layersRef = useRef<Layer[]>([initialLayerRef.current]);
