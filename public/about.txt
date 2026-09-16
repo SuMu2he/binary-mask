@@ -1,0 +1,10 @@
+# About Binary Mask Studio
+> APPLICATION INFORMATION
+
+## Binary Mask Studio
+
+Application Name | Binary Mask Studio
+Version | Ver.1.0
+Last Updated | 2026.09.01
+Author / Maintainer | Mingze Sun
+Powered by | OpenAI Codex
