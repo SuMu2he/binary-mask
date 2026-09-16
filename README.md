@@ -1,4 +1,4 @@
-# 二值掩膜工坊 Binary Mask Studio
+# 二值掩膜工坊 Binary Mask StudioZZZZZZZZZ
 
 浏览器端的二值掩膜编辑工具。保留绘图、文本、光栅、图层、选区、矩阵编辑、工程保存与 PNG/CSV/TXT 导出；评论功能及其后台已移除。
 
