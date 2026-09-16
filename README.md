@@ -30,6 +30,8 @@ pnpm preview
 
 在 GitHub 中修改 **`public/about.txt`** 或 **`public/help.txt`** 并提交到 `main` 后，网站会在部署成功后同步更新。发布需要一些时间；完成后刷新页面，再打开对应弹窗即可看到新内容。修改 `README.md` 会更新仓库自述文件。
 
+构建时，两份 TXT 的内容也会随网页一起加载。帮助和应用信息弹窗打开时立即显示完整正文及诗句；后台读取 TXT 时保留现有正文，避免弹窗先显示诗句、再补上内容。网络暂时不可用时仍可查看随网页加载的文档。
+
 仓库的 **Settings → Pages → Build and deployment → Source** 使用 **GitHub Actions**。工作流读取 Pages 的实际网址和路径，因此 GitHub Pages 的 `/binary-mask` 路径已自动配置。
 
 ### 手动构建

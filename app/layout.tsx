@@ -1,4 +1,7 @@
 import type { Metadata } from 'next';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import DialogDocumentsProvider from './dialog-documents-provider';
 import './globals.css';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH?.replace(/\/+$/, '') ?? '';
@@ -27,9 +30,14 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // Static export includes the TXT content in the initial page payload.
+  const documents = {
+    help: readFileSync(join(process.cwd(), 'public', 'help.txt'), 'utf8'),
+    about: readFileSync(join(process.cwd(), 'public', 'about.txt'), 'utf8'),
+  };
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body><DialogDocumentsProvider documents={documents}>{children}</DialogDocumentsProvider></body>
     </html>
   );
 }

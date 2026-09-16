@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useState } from 'react';
+import { useDialogDocuments } from './dialog-documents-provider';
 
 type HelpBlock =
   | { kind: 'paragraph'; text: string }
@@ -57,7 +58,11 @@ function HelpBlocks({ blocks }: { blocks: HelpBlock[] }) {
 }
 
 export default function HelpDialog({ onClose, quote }: { onClose: () => void; quote: { content: string; source: string } }) {
-  const [document, setDocument] = useState<HelpDocument | null>(null);
+  const initialDocuments = useDialogDocuments();
+  const [document, setDocument] = useState<HelpDocument | null>(() => {
+    try { return parseHelpDocument(initialDocuments.help); }
+    catch { return null; }
+  });
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -87,7 +92,7 @@ export default function HelpDialog({ onClose, quote }: { onClose: () => void; qu
         <nav className="help-nav" aria-label="说明章节">{sections.map((section, index) => <a href={`#help-section-${index + 1}`} key={index}>{section.label}</a>)}</nav>
         <div className="help-content">{sections.map((section, index) => <section id={`help-section-${index + 1}`} key={index}><h3>{section.title}</h3><HelpBlocks blocks={section.blocks} /></section>)}</div>
       </> : <div className="help-content"><p role={failed ? 'alert' : 'status'}>{failed ? '帮助内容暂时无法加载，请关闭后重试。' : '正在加载帮助内容…'}</p></div>}
-      <div className="help-quote"><span>{quote.content}</span><small>{quote.source}</small></div>
+      {document && <div className="help-quote"><span>{quote.content}</span><small>{quote.source}</small></div>}
     </section>
   </div>;
 }

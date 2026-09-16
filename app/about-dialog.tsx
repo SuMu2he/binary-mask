@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useDialogDocuments } from './dialog-documents-provider';
 
 type AboutDocument = {
   title: string;
@@ -30,7 +31,11 @@ export function parseAboutDocument(text: string): AboutDocument {
 }
 
 export default function AboutDialog({ onClose, quote }: { onClose: () => void; quote: { content: string; source: string } }) {
-  const [document, setDocument] = useState<AboutDocument | null>(null);
+  const initialDocuments = useDialogDocuments();
+  const [document, setDocument] = useState<AboutDocument | null>(() => {
+    try { return parseAboutDocument(initialDocuments.about); }
+    catch { return null; }
+  });
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -57,7 +62,7 @@ export default function AboutDialog({ onClose, quote }: { onClose: () => void; q
         <div className="about-logo"><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span><strong>{document.name}</strong></div>
         <dl>{document.fields.map((field, index) => <div key={index}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>
       </> : <div className="about-logo"><p role={failed ? 'alert' : 'status'}>{failed ? '应用信息暂时无法加载，请关闭后重试。' : '正在加载应用信息…'}</p></div>}
-      <div className="about-quote"><span>{quote.content}</span><small>{quote.source}</small></div>
+      {document && <div className="about-quote"><span>{quote.content}</span><small>{quote.source}</small></div>}
     </section>
   </div>;
 }
