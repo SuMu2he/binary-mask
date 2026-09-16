@@ -22,7 +22,17 @@ pnpm preview
 
 通过终端显示的 HTTP 地址访问。请通过静态 HTTP 服务预览，不要直接双击 HTML 文件。
 
-## GitHub Pages 路径
+## GitHub Pages 自动部署
+
+网站地址：**https://sumu2he.github.io/binary-mask/**
+
+`.github/workflows/pages.yml` 会在每次提交到 `main` 分支后，自动安装依赖、构建静态网站并发布到 GitHub Pages。也可以在仓库的 **Actions → Deploy GitHub Pages → Run workflow** 手动发布。构建和发布进度可在 [Actions](https://github.com/SuMu2he/binary-mask/actions/workflows/pages.yml) 查看。
+
+在 GitHub 中修改 **`public/about.txt`** 或 **`public/help.txt`** 并提交到 `main` 后，网站会在部署成功后同步更新。发布需要一些时间；完成后刷新页面，再打开对应弹窗即可看到新内容。修改 `README.md` 会更新仓库自述文件。
+
+仓库的 **Settings → Pages → Build and deployment → Source** 使用 **GitHub Actions**。工作流读取 Pages 的实际网址和路径，因此 GitHub Pages 的 `/binary-mask` 路径已自动配置。
+
+### 手动构建
 
 默认构建适用于网站根目录或自定义域名。如果之后部署到 `https://用户名.github.io/仓库名/`，构建前将 `NEXT_PUBLIC_BASE_PATH` 设置为 `/仓库名`。
 
@@ -42,7 +52,7 @@ Remove-Item Env:NEXT_PUBLIC_BASE_PATH
 Remove-Item Env:NEXT_PUBLIC_SITE_URL
 ```
 
-仅发布 `out/` 的全部内容，包括 `.nojekyll`、HTML、RSC 数据和静态资源。当前项目没有配置自动部署；后续选定仓库后再接入 GitHub Pages。
+仅发布 `out/` 的全部内容，包括 `.nojekyll`、HTML、RSC 数据和静态资源。GitHub Actions 会自动完成这些操作，无需手动上传构建文件。
 
 “帮助”和“应用信息”中的随机诗句仍会在浏览器中请求公开接口；接口不可用时自动使用内置诗句，掩膜编辑不依赖该接口。
 
