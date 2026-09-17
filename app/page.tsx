@@ -583,7 +583,6 @@ export default function Home() {
   const dirtyRef = useRef(false);
   const undoRef = useRef<HistorySnapshot[]>([]);
   const redoRef = useRef<HistorySnapshot[]>([]);
-  const layerClipboardRef = useRef<LayerSnapshot[]>([]);
   const matrixDraftRef = useRef<Uint8Array | null>(null);
   const pendingZoomAnchorRef = useRef<{ x: number; y: number; clientX: number; clientY: number } | null>(null);
   const appliedAutoFitRequestRef = useRef(-1);
@@ -598,7 +597,6 @@ export default function Home() {
   const [historyVersion, setHistoryVersion] = useState(0);
   const [activeLayerId, setActiveLayerId] = useState(initialLayerRef.current.id);
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([initialLayerRef.current.id]);
-  const [layerClipboardVersion, setLayerClipboardVersion] = useState(0);
   const [dragLayerId, setDragLayerId] = useState<string | null>(null);
   const [tool, setTool] = useState<Tool>('shape');
   const [brushSize, setBrushSize] = useState(12);
@@ -1056,24 +1054,15 @@ export default function Home() {
     const copies = selected.map((layer) => ({ ...cloneLayer(layer), id: makeId(), name: `${layer.name} 副本`, locked: false }));
     layersRef.current.splice(topIndex, 0, ...copies); setActiveLayerId(copies[0].id); setSelectedLayerIds(copies.map((layer) => layer.id)); bumpDocument();
   };
-  const cutSelectedLayers = () => {
-    const selected = layersRef.current.filter((layer) => selectedSet.has(layer.id)); if (!selected.length) return;
-    if (selected.some((layer) => layer.locked)) { setToast('选中的图层中包含锁定图层，请先解锁。'); return; }
-    pushHistory(); layerClipboardRef.current = selected.map(cloneLayer); setLayerClipboardVersion((value) => value + 1);
-    layersRef.current = layersRef.current.filter((layer) => !selectedSet.has(layer.id)); if (!layersRef.current.length) layersRef.current = [createLayer(width, height, '图层 1')];
-    const next = layersRef.current[0]; setActiveLayerId(next.id); setSelectedLayerIds([next.id]); bumpDocument(); setToast(`已剪切 ${selected.length} 个图层。`);
-  };
-  const pasteLayers = () => {
-    if (!layerClipboardRef.current.length) { setToast('图层剪贴板为空。'); return; } pushHistory();
-    const copies: Layer[] = layerClipboardRef.current.map((layer) => ({ ...layer, pixels: new Uint8Array(layer.pixels), id: makeId(), locked: false }));
-    const activeIndex = layersRef.current.findIndex((layer) => layer.id === activeLayerId); layersRef.current.splice(Math.max(0, activeIndex), 0, ...copies);
-    setActiveLayerId(copies[0].id); setSelectedLayerIds(copies.map((layer) => layer.id)); bumpDocument();
-  };
-  const deleteSelectedLayers = () => {
-    const selected = layersRef.current.filter((layer) => selectedSet.has(layer.id)); if (!selected.length) return;
-    if (selected.some((layer) => layer.locked)) { setToast('选中的图层中包含锁定图层，请先解锁。'); return; }
-    pushHistory(); layersRef.current = layersRef.current.filter((layer) => !selectedSet.has(layer.id)); if (!layersRef.current.length) layersRef.current = [createLayer(width, height, '图层 1')];
-    const next = layersRef.current[0]; setActiveLayerId(next.id); setSelectedLayerIds([next.id]); bumpDocument();
+  const deleteLayer = (id: string) => {
+    const index = layersRef.current.findIndex((layer) => layer.id === id); const layer = layersRef.current[index];
+    if (!layer) return;
+    if (layer.locked) { setToast('图层已锁定，请先解锁后再删除。'); return; }
+    pushHistory(); layersRef.current.splice(index, 1);
+    if (!layersRef.current.length) layersRef.current = [createLayer(width, height, '图层 1')];
+    const remainingSelection = selectedLayerIds.filter((selectedId) => layersRef.current.some((item) => item.id === selectedId));
+    const nextActiveId = layersRef.current.some((item) => item.id === activeLayerId) ? activeLayerId : remainingSelection[0] ?? layersRef.current[Math.min(index, layersRef.current.length - 1)].id;
+    setActiveLayerId(nextActiveId); setSelectedLayerIds(remainingSelection.length ? remainingSelection : [nextActiveId]); bumpDocument();
   };
   const mergeSelectedLayers = () => void withProcessing('正在合并图层', async () => {
     const selected = layersRef.current.filter((layer) => selectedSet.has(layer.id)); if (selected.length < 2) return;
@@ -1108,7 +1097,13 @@ export default function Home() {
     else setSelectedLayerIds([id]);
     setActiveLayerId(id);
   };
-  const moveActiveLayer = (direction: -1 | 1) => { if (selectedLayerIds.length !== 1 || activeLayer.locked) return; const index = layersRef.current.findIndex((layer) => layer.id === activeLayerId); const nextIndex = index + direction; if (nextIndex < 0 || nextIndex >= layersRef.current.length) return; pushHistory(); const [layer] = layersRef.current.splice(index, 1); layersRef.current.splice(nextIndex, 0, layer); bumpDocument(); };
+  const moveLayer = (id: string, direction: -1 | 1) => {
+    const index = layersRef.current.findIndex((layer) => layer.id === id);
+    const layer = layersRef.current[index]; const nextIndex = index + direction;
+    if (!layer || layer.locked || nextIndex < 0 || nextIndex >= layersRef.current.length) return;
+    pushHistory(); layersRef.current.splice(index, 1); layersRef.current.splice(nextIndex, 0, layer);
+    setActiveLayerId(id); setSelectedLayerIds([id]); bumpDocument();
+  };
   const dropLayer = (targetId: string) => { if (!dragLayerId || dragLayerId === targetId) return; const sourceIndex = layersRef.current.findIndex((layer) => layer.id === dragLayerId); const source = layersRef.current[sourceIndex]; if (!source || source.locked) return; let targetIndex = layersRef.current.findIndex((layer) => layer.id === targetId); pushHistory(); layersRef.current.splice(sourceIndex, 1); if (sourceIndex < targetIndex) targetIndex -= 1; layersRef.current.splice(targetIndex, 0, source); setDragLayerId(null); bumpDocument(); };
 
   const openMatrixEditor = () => void withProcessing('正在打开矩阵', async () => {
@@ -1250,7 +1245,6 @@ export default function Home() {
   const matrixGridRows = Array.from({ length: Math.min(MATRIX_ROWS, matrixRegion.y + matrixRegion.height - matrixStartY) }, (_, index) => matrixStartY + index);
   const selectionLabel = selection ? `X ${selection.x}–${selection.x + selection.width - 1} · Y ${selection.y}–${selection.y + selection.height - 1} · ${selection.width}×${selection.height} px` : '';
   const layerList = layersRef.current;
-  const activeLayerIndex = layerList.findIndex((layer) => layer.id === activeLayerId);
 
   return (
     <main className="app-shell">
@@ -1327,12 +1321,16 @@ export default function Home() {
 
         <aside className="right-sidebar">
           <section className="panel layer-panel"><SectionHeading number="03" title="图层操作" subtitle="LAYERS" />
-            <div className="layer-actions primary-actions"><div className="layer-create-control" ref={layerCreateRef}><button type="button" aria-haspopup="menu" aria-expanded={layerCreateMenuOpen} onClick={() => setLayerCreateMenuOpen((open) => !open)}>新建</button>{layerCreateMenuOpen && <div className="layer-create-menu" role="menu" aria-label="新建图层类型"><button type="button" role="menuitem" onClick={() => addLayer(TRANSPARENT)}><i className="layer-fill-swatch transparent" aria-hidden="true" /><span>透明图层</span></button><button type="button" role="menuitem" onClick={() => addLayer(OPAQUE_ZERO)}><i className="layer-fill-swatch zero" aria-hidden="true" /><span>黑色 0 图层</span></button><button type="button" role="menuitem" onClick={() => addLayer(OPAQUE_ONE)}><i className="layer-fill-swatch one" aria-hidden="true" /><span>白色 1 图层</span></button></div>}</div><button type="button" onClick={duplicateSelectedLayers}>复制图层</button><button type="button" onClick={cutSelectedLayers}>剪切图层</button><button type="button" disabled={!layerClipboardRef.current.length} onClick={pasteLayers}>粘贴图层</button></div>
-            <div className="layer-actions secondary-actions"><button type="button" disabled={selectedLayerIds.length < 2} onClick={mergeSelectedLayers}>合并选中</button><button type="button" disabled={selectedLayerIds.length !== 1 || activeLayerIndex <= 0 || activeLayer.locked} onClick={() => moveActiveLayer(-1)}>上移</button><button type="button" disabled={selectedLayerIds.length !== 1 || activeLayerIndex >= layerList.length - 1 || activeLayer.locked} onClick={() => moveActiveLayer(1)}>下移</button><button className="danger-text" type="button" onClick={deleteSelectedLayers}>删除</button></div>
-            <div className="layer-list" aria-label="图层列表">{layerList.map((layer) => {
+            <div className="layer-actions primary-actions"><div className="layer-create-control" ref={layerCreateRef}><button type="button" aria-haspopup="menu" aria-expanded={layerCreateMenuOpen} onClick={() => setLayerCreateMenuOpen((open) => !open)}>新建</button>{layerCreateMenuOpen && <div className="layer-create-menu" role="menu" aria-label="新建图层类型"><button type="button" role="menuitem" onClick={() => addLayer(TRANSPARENT)}><i className="layer-fill-swatch transparent" aria-hidden="true" /><span>透明图层</span></button><button type="button" role="menuitem" onClick={() => addLayer(OPAQUE_ZERO)}><i className="layer-fill-swatch zero" aria-hidden="true" /><span>黑色 0 图层</span></button><button type="button" role="menuitem" onClick={() => addLayer(OPAQUE_ONE)}><i className="layer-fill-swatch one" aria-hidden="true" /><span>白色 1 图层</span></button></div>}</div><button type="button" onClick={duplicateSelectedLayers}>复制图层</button></div>
+            <div className="layer-actions secondary-actions"><button type="button" disabled={selectedLayerIds.length < 2} onClick={mergeSelectedLayers}>合并选中</button></div>
+            <div className="layer-list" aria-label="图层列表">{layerList.map((layer, index) => {
               const selected = selectedSet.has(layer.id); const active = layer.id === activeLayerId;
               return <div key={layer.id} className={`layer-row ${selected ? 'selected' : ''} ${active ? 'active' : ''} ${layer.locked ? 'locked' : ''}`} draggable={!layer.locked} onDragStart={() => setDragLayerId(layer.id)} onDragOver={(event) => event.preventDefault()} onDrop={() => dropLayer(layer.id)} onClick={(event) => selectLayer(event, layer.id)} onDoubleClick={() => renameLayer(layer.id)}>
-                <button type="button" className="icon-button" aria-label={layer.visible ? '隐藏图层' : '显示图层'} title={layer.visible ? '隐藏图层' : '显示图层'} onClick={(event) => { event.stopPropagation(); toggleLayerVisibility(layer.id); }}><EyeIcon open={layer.visible} /></button><LayerThumbnail layer={layer} width={width} height={height} version={docVersion} /><span className="layer-name"><strong>{layer.name}</strong><small>{layer.visible ? '可见' : '隐藏'} · {layer.locked ? '已锁定' : '可编辑'}</small></span><button type="button" className="icon-button lock-button" aria-label={layer.locked ? '解锁图层' : '锁定图层'} title={layer.locked ? '解锁图层' : '锁定图层'} onClick={(event) => { event.stopPropagation(); toggleLayerLock(layer.id); }}><LockIcon locked={layer.locked} /></button><span className="drag-handle" aria-hidden="true">⋮⋮</span>
+                <button type="button" className="icon-button" aria-label={layer.visible ? '隐藏图层' : '显示图层'} title={layer.visible ? '隐藏图层' : '显示图层'} onClick={(event) => { event.stopPropagation(); toggleLayerVisibility(layer.id); }}><EyeIcon open={layer.visible} /></button><LayerThumbnail layer={layer} width={width} height={height} version={docVersion} /><span className="layer-name"><strong>{layer.name}</strong><small>{layer.visible ? '可见' : '隐藏'} · {layer.locked ? '已锁定' : '可编辑'}</small></span><button type="button" className="icon-button lock-button" aria-label={layer.locked ? '解锁图层' : '锁定图层'} title={layer.locked ? '解锁图层' : '锁定图层'} onClick={(event) => { event.stopPropagation(); toggleLayerLock(layer.id); }}><LockIcon locked={layer.locked} /></button><button type="button" className="icon-button delete-layer-button" aria-label={`删除图层 ${layer.name}`} title="删除图层" disabled={layer.locked} onClick={(event) => { event.stopPropagation(); deleteLayer(layer.id); }} onDoubleClick={(event) => event.stopPropagation()}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m9 9 6 6m0-6-6 6" /></svg></button><div className="layer-order-controls" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
+                  <button type="button" className="icon-button layer-order-button" aria-label={`上移图层 ${layer.name}`} title="上移图层" disabled={index === 0 || layer.locked} onClick={() => moveLayer(layer.id, -1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6" /></svg></button>
+                  <span className="drag-handle" aria-hidden="true"><i /><i /><i /></span>
+                  <button type="button" className="icon-button layer-order-button" aria-label={`下移图层 ${layer.name}`} title="下移图层" disabled={index === layerList.length - 1 || layer.locked} onClick={() => moveLayer(layer.id, 1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></button>
+                </div>
               </div>;
             })}</div>
             <button className="clear-all-button" type="button" onClick={clearAllLayers}>清空全部图层</button>
@@ -1370,7 +1368,7 @@ export default function Home() {
       {pastePreview && <div className="paste-hint">鼠标定位左上角 · Enter / 双击确认 · Esc 取消 · 方向键微调</div>}
       {movePreview && <div className="move-hint"><strong>ΔX {movePreview.x - movePreview.source.x >= 0 ? '+' : ''}{movePreview.x - movePreview.source.x} · ΔY {movePreview.y - movePreview.source.y >= 0 ? '+' : ''}{movePreview.y - movePreview.source.y}</strong><span>X {movePreview.x} · Y {movePreview.y}</span><small>鼠标定位左上角 · Enter / 双击确认 · Esc 取消 · 方向键微调</small></div>}
       {toast && <div className="toast" role="status"><span />{toast}</div>}
-      <span className="history-sentinel" data-history-version={historyVersion} data-layer-clipboard-version={layerClipboardVersion} />
+      <span className="history-sentinel" data-history-version={historyVersion} />
     </main>
   );
 }
