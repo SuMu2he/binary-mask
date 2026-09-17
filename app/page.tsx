@@ -48,6 +48,7 @@ const OPAQUE_ONE = 2;
 const DEFAULT_WIDTH = 1920;
 const DEFAULT_HEIGHT = 1080;
 const DEFAULT_DPI = 300;
+const DEFAULT_SHAPE_SIZE = 300;
 const MAX_DIMENSION = 4096;
 const MIN_ZOOM = 2;
 const MAX_ZOOM = 1600;
@@ -288,7 +289,15 @@ function writeGrating(pixels: Uint8Array, width: number, height: number, spec: G
   return touched;
 }
 
-function drawGratingPreview(context: CanvasRenderingContext2D, spec: GratingSpec, mode: GratingWriteMode, polarity: GratingPolarity, operation: BooleanOperation, outside: boolean) {
+function strokeParametricBoundary(context: CanvasRenderingContext2D, outside: boolean, scale: number) {
+  context.save();
+  context.setLineDash([6 / scale, 4 / scale]);
+  context.lineWidth = 3.5 / scale; context.strokeStyle = '#ffffff'; context.stroke();
+  context.lineWidth = 1.5 / scale; context.strokeStyle = outside ? '#c94b42' : '#316749'; context.stroke();
+  context.restore();
+}
+
+function drawGratingPreview(context: CanvasRenderingContext2D, spec: GratingSpec, mode: GratingWriteMode, polarity: GratingPolarity, operation: BooleanOperation, outside: boolean, previewScale: number) {
   const halfWidth = spec.width / 2;
   const halfHeight = spec.height / 2;
   const lineWidth = (spec.period * spec.duty) / 100;
@@ -315,8 +324,8 @@ function drawGratingPreview(context: CanvasRenderingContext2D, spec: GratingSpec
     }
   }
   context.restore();
-  context.strokeStyle = outside ? '#ff776e' : '#c7ff3d';
-  context.strokeRect(-halfWidth, -halfHeight, spec.width, spec.height);
+  context.beginPath(); context.rect(-halfWidth, -halfHeight, spec.width, spec.height);
+  strokeParametricBoundary(context, outside, previewScale);
 }
 
 function measureTextBounds(spec: TextSpec): Bounds {
@@ -605,13 +614,13 @@ export default function Home() {
   const [shape, setShape] = useState<ParametricKind>('circle');
   const [centerX, setCenterX] = useState(DEFAULT_WIDTH / 2);
   const [centerY, setCenterY] = useState(DEFAULT_HEIGHT / 2);
-  const [dimensionX, setDimensionX] = useState(10);
-  const [dimensionY, setDimensionY] = useState(10);
+  const [dimensionX, setDimensionX] = useState(DEFAULT_SHAPE_SIZE);
+  const [dimensionY, setDimensionY] = useState(DEFAULT_SHAPE_SIZE);
   const [aspectLinked, setAspectLinked] = useState(true);
   const [aspectRatio, setAspectRatio] = useState(1);
-  const [triangleBase, setTriangleBase] = useState(100);
-  const [triangleHeight, setTriangleHeight] = useState((100 * Math.sqrt(3)) / 2);
-  const [triangleProjection, setTriangleProjection] = useState(50);
+  const [triangleBase, setTriangleBase] = useState(DEFAULT_SHAPE_SIZE);
+  const [triangleHeight, setTriangleHeight] = useState((DEFAULT_SHAPE_SIZE * Math.sqrt(3)) / 2);
+  const [triangleProjection, setTriangleProjection] = useState(DEFAULT_SHAPE_SIZE / 2);
   const [equilateral, setEquilateral] = useState(true);
   const [textContent, setTextContent] = useState('忽闻海上有仙山 山在虚无缥缈间');
   const [textFontSize, setTextFontSize] = useState(72);
@@ -788,26 +797,28 @@ export default function Home() {
     context.lineWidth = Math.max(1.5, width / 900);
     context.setLineDash([Math.max(5, width / 240), Math.max(4, width / 300)]);
     if (tool === 'shape' && hasParametricContent) {
+      const previewScale = Math.max(MIN_ZOOM / 100, zoom / 100);
       context.save(); context.translate(centerX, centerY); context.rotate((-rotation * Math.PI) / 180);
       if (shape === 'text') {
         const layout = measureTextLayout(context, textSpec);
         context.setLineDash([]);
         context.lineWidth = Math.max(1, textFontSizePixels / 64);
-        context.strokeStyle = partiallyOutside ? '#ff776e' : '#c7ff3d';
+        context.strokeStyle = partiallyOutside ? '#c94b42' : '#316749';
         context.fillStyle = operation === 'set0' ? 'rgba(0,0,0,.78)' : operation === 'xor' ? 'rgba(199,255,61,.58)' : 'rgba(255,255,255,.82)';
         drawTextLayout(context, layout, 'stroke');
         drawTextLayout(context, layout, 'fill');
         context.setLineDash([Math.max(5, width / 240), Math.max(4, width / 300)]);
         context.lineWidth = Math.max(1.5, width / 900);
-        context.strokeRect(layout.bounds.minX, layout.bounds.minY, layout.bounds.maxX - layout.bounds.minX, layout.bounds.maxY - layout.bounds.minY);
+        context.beginPath(); context.rect(layout.bounds.minX, layout.bounds.minY, layout.bounds.maxX - layout.bounds.minX, layout.bounds.maxY - layout.bounds.minY);
+        strokeParametricBoundary(context, partiallyOutside, previewScale);
       } else if (shape === 'grating') {
-        drawGratingPreview(context, gratingSpec, gratingWriteMode, gratingPolarity, operation, partiallyOutside);
+        drawGratingPreview(context, gratingSpec, gratingWriteMode, gratingPolarity, operation, partiallyOutside, previewScale);
       } else {
-        context.strokeStyle = partiallyOutside ? '#ff776e' : '#c7ff3d'; context.beginPath();
+        context.beginPath();
         if (shape === 'circle') context.ellipse(0, 0, sizeX / 2, sizeY / 2, 0, 0, Math.PI * 2);
         else if (shape === 'rectangle') context.rect(-sizeX / 2, -sizeY / 2, sizeX, sizeY);
         else { const vertices = triangleVertices(shapeSpec); context.moveTo(vertices[0].x, vertices[0].y); context.lineTo(vertices[1].x, vertices[1].y); context.lineTo(vertices[2].x, vertices[2].y); context.closePath(); }
-        context.stroke();
+        strokeParametricBoundary(context, partiallyOutside, previewScale);
       }
       context.restore();
     }
@@ -862,7 +873,7 @@ export default function Home() {
       if (tool === 'erase') { context.beginPath(); context.moveTo(cursor.x - radius * .34, cursor.y + radius * .34); context.lineTo(cursor.x + radius * .34, cursor.y - radius * .34); context.strokeStyle = '#d6574d'; context.stroke(); }
       context.restore();
     }
-  }, [brushSize, centerX, centerY, cursor, gratingPolarity, gratingSpec, gratingWriteMode, hasParametricContent, height, movePreview, operation, paintValue, partiallyOutside, pastePreview, rotation, selection, selectionDraft, shape, shapeSpec, sizeX, sizeY, textFontSizePixels, textSpec, tool, width]);
+  }, [brushSize, centerX, centerY, cursor, gratingPolarity, gratingSpec, gratingWriteMode, hasParametricContent, height, movePreview, operation, paintValue, partiallyOutside, pastePreview, rotation, selection, selectionDraft, shape, shapeSpec, sizeX, sizeY, textFontSizePixels, textSpec, tool, width, zoom]);
 
   useEffect(() => { if (!toast) return; const timeout = window.setTimeout(() => setToast(''), 3200); return () => window.clearTimeout(timeout); }, [toast]);
   useEffect(() => {
